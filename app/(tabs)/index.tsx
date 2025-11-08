@@ -1,75 +1,198 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+"use client"
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import { Ionicons } from "@expo/vector-icons"
+import { useRouter } from "expo-router"
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { Badge } from "../../components/ui/badge"
+import { Button } from "../../components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
+import { colors } from "../../constants/theme"
+import { useAuth } from "../../contexts/AuthContext"
 
 export default function HomeScreen() {
+  const { user } = useAuth()
+  const router = useRouter()
+
+  const services = [
+    { id: 1, name: "Wash & Fold", price: "MK 2,500", icon: "shirt" },
+    { id: 2, name: "Dry Cleaning", price: "MK 5,000", icon: "sparkles" },
+    { id: 3, name: "Iron Only", price: "MK 1,500", icon: "flame" },
+    { id: 4, name: "Express Service", price: "MK 3,500", icon: "flash" },
+  ]
+
+  const recentOrders = [
+    { id: 1, status: "In Progress", items: 5, date: "Today" },
+    { id: 2, status: "Completed", items: 3, date: "Yesterday" },
+  ]
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
-  );
+    <ScrollView style={styles.container}>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.greeting}>Hello, {user?.name?.split(" ")[0]}!</Text>
+          <Text style={styles.subGreeting}>What can we help you with today?</Text>
+        </View>
+        <TouchableOpacity style={styles.notificationButton}>
+          <Ionicons name="notifications-outline" size={24} color={colors.text} />
+        </TouchableOpacity>
+      </View>
+
+      <Card style={styles.quickActions}>
+        <CardHeader>
+          <CardTitle>Quick Actions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <View style={styles.actionButtons}>
+            <Button onPress={() => router.push("/(tabs)/schedule")} style={styles.actionButton}>
+              Schedule Pickup
+            </Button>
+            <Button variant="outline" onPress={() => router.push("/(tabs)/tracking")} style={styles.actionButton}>
+              Track Order
+            </Button>
+          </View>
+        </CardContent>
+      </Card>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Our Services</Text>
+        <View style={styles.servicesGrid}>
+          {services.map((service) => (
+            <TouchableOpacity key={service.id} style={styles.serviceCard}>
+              <View style={styles.serviceIcon}>
+                <Ionicons name={service.icon as any} size={24} color={colors.primary} />
+              </View>
+              <Text style={styles.serviceName}>{service.name}</Text>
+              <Text style={styles.servicePrice}>{service.price}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      <Card style={styles.recentOrders}>
+        <CardHeader>
+          <CardTitle>Recent Orders</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {recentOrders.map((order) => (
+            <View key={order.id} style={styles.orderItem}>
+              <View style={styles.orderInfo}>
+                <Text style={styles.orderDate}>{order.date}</Text>
+                <Text style={styles.orderItems}>{order.items} items</Text>
+              </View>
+              <Badge variant={order.status === "Completed" ? "success" : "warning"}>{order.status}</Badge>
+            </View>
+          ))}
+        </CardContent>
+      </Card>
+    </ScrollView>
+  )
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
+    backgroundColor: colors.surface,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    paddingTop: 60,
+    backgroundColor: colors.background,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  greeting: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: colors.text,
   },
-});
+  subGreeting: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+  notificationButton: {
+    padding: 8,
+  },
+  quickActions: {
+    margin: 20,
+    marginTop: 0,
+  },
+  actionButtons: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  actionButton: {
+    flex: 1,
+  },
+  section: {
+    padding: 20,
+    paddingTop: 0,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: colors.text,
+    marginBottom: 16,
+  },
+  servicesGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  serviceCard: {
+    flex: 1,
+    minWidth: "45%",
+    backgroundColor: colors.background,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  serviceIcon: {
+    width: 48,
+    height: 48,
+    backgroundColor: colors.surface,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  serviceName: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: colors.text,
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  servicePrice: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  recentOrders: {
+    margin: 20,
+    marginTop: 0,
+  },
+  orderItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  orderInfo: {
+    flex: 1,
+  },
+  orderDate: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: colors.text,
+  },
+  orderItems: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+})
