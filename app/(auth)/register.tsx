@@ -3,18 +3,18 @@
 import { Ionicons } from "@expo/vector-icons"
 import { LinearGradient } from "expo-linear-gradient"
 import { useRouter } from "expo-router"
-import { useState, useCallback } from "react"
-import { 
-  Alert, 
-  KeyboardAvoidingView, 
-  Platform, 
-  ScrollView, 
-  StyleSheet, 
-  Text, 
-  View, 
+import { useCallback, useState } from "react"
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
-  ActivityIndicator 
+  View
 } from "react-native"
 import { colors } from "../../constants/theme"
 import { useAuth } from "../../contexts/AuthContext"

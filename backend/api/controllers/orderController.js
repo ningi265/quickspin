@@ -82,14 +82,15 @@ const createOrder = async (req, res) => {
   }
 };
 
-// ... rest of the controller functions remain the same
+
 const getOrders = async (req, res) => {
   try {
-    const orders = await Order.find({ userId: req.userId })
-      .populate('services.serviceId')
-      .sort({ createdAt: -1 });
+    console.log('📦 Fetching orders for user:', req.userId)
+    const orders = await Order.find({ userId: req.userId }).sort({ createdAt: -1 });
+    console.log('✅ Found orders:', orders.length)
     res.json(orders);
   } catch (error) {
+    console.error('❌ Get orders error:', error)
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };

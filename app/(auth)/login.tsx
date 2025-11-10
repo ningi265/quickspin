@@ -35,19 +35,24 @@ export default function LoginScreen() {
       return
     }
 
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      Alert.alert("Error", "Please enter a valid email address")
+      return
+    }
+
     setLoading(true)
     try {
       console.log("🔐 Calling login function...")
       await login(email, password)
       console.log("✅ Login successful, navigating to tabs...")
       
-      // Use setTimeout to ensure state is updated before navigation
-      setTimeout(() => {
-        router.replace("/(tabs)")
-      }, 100)
+      // Navigate to home screen
+      router.replace("/(tabs)")
     } catch (error: any) {
       console.error("❌ Login error:", error)
-      Alert.alert("Error", error.message || "Login failed. Please try again.")
+      Alert.alert("Login Failed", error.message || "Login failed. Please check your credentials and try again.")
     } finally {
       setLoading(false)
       console.log("🔐 Login process completed")
