@@ -2,22 +2,45 @@
 
 import { Ionicons } from "@expo/vector-icons"
 import { Stack, router } from "expo-router"
-import { useState } from "react"
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
+import { useEffect, useState } from "react"
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { colors } from "../../constants/theme"
+import { useAuth } from "../../contexts/AuthContext"
+import { apiService } from "../../hooks/services/api"
+
+interface Service {
+  _id: string;
+  name: string;
+  description: string;
+  pricePerKg: number;
+  icon: string;
+}
 
 export default function SchedulePickupScreen() {
+  const { user } = useAuth()
+  const [services, setServices] = useState<Service[]>([])
   const [selectedServices, setSelectedServices] = useState<string[]>([])
   const [selectedDate, setSelectedDate] = useState("")
   const [selectedTime, setSelectedTime] = useState("")
   const [notes, setNotes] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [servicesLoading, setServicesLoading] = useState(true)
 
-  const services = [
-    { id: "wash", name: "Wash", icon: "shirt", price: 800, description: "Professional washing" },
-    { id: "dry", name: "Dry", icon: "sunny", price: 400, description: "Quick drying" },
-    { id: "iron", name: "Iron", icon: "flame", price: 600, description: "Professional ironing" },
-    { id: "fold", name: "Fold", icon: "layers", price: 200, description: "Neat folding" },
-  ]
+  useEffect(() => {
+    loadServices()
+  }, [])
+
+  const loadServices = async () => {
+    try {
+      const servicesData = await apiService.getServices()
+      setServices(servicesData)
+    } catch (error) {
+      console.error('Error loading services:', error)
+      Alert.alert("Error", "Failed to load services")
+    } finally {
+      setServicesLoading(false)
+    }
+  }
 
   const timeSlots = ["08:00 - 10:00", "10:00 - 12:00", "12:00 - 14:00", "14:00 - 16:00", "16:00 - 18:00"]
 
@@ -37,12 +60,17 @@ export default function SchedulePickupScreen() {
 
   const calculateTotal = () => {
     return selectedServices.reduce((total, serviceId) => {
-      const service = services.find((s) => s.id === serviceId)
-      return total + (service?.price || 0)
+      const service = services.find((s) => s._id === serviceId)
+      return total + (service?.pricePerKg || 0)
     }, 0)
   }
 
-  const handleSchedule = () => {
+  const handleSchedule = async () => {
+    if (!user) {
+      Alert.alert("Error", "Please login to schedule a pickup")
+      return
+    }
+
     if (selectedServices.length === 0) {
       Alert.alert("Error", "Please select at least one service")
       return
@@ -52,9 +80,78 @@ export default function SchedulePickupScreen() {
       return
     }
 
-    Alert.alert("Success", "Your pickup has been scheduled successfully!", [
-      { text: "OK", onPress: () => router.push("/(tabs)/tracking") },
-    ])
+    setLoading(true)
+    try {
+      const orderData = {
+        services: selectedServices.map(serviceId => ({
+          serviceId,
+          quantity: 1
+        })),
+        pickupDate: selectedDate,
+        pickupTimeSlot: selectedTime,
+        location: {
+          address: user?.address || "Namiwawa, Blantyre",
+          latitude: -15.7861,
+          longitude: 35.0058,
+        },
+        specialInstructions: notes,
+        items: [
+          {
+            name: "Laundry Items",
+            quantity: 1,
+            weight: 1.0
+          }
+        ]
+      }
+
+      await apiService.createOrder(orderData)
+      
+      Alert.alert("Success", "Your pickup has been scheduled successfully!", [
+        { 
+          text: "Track Order", 
+          onPress: () => router.push("/(tabs)/orders") 
+        },
+        { 
+          text: "OK", 
+          style: "cancel" 
+        }
+      ])
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to schedule pickup")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const getServiceIcon = (serviceName: string) => {
+    const iconMap: { [key: string]: string } = {
+      'Wash': 'shirt',
+      'Dry': 'sunny',
+      'Iron': 'flame',
+      'Fold': 'layers',
+      'Wash & Fold': 'shirt',
+      'Dry Cleaning': 'sparkles'
+    }
+    return iconMap[serviceName] || 'shirt'
+  }
+
+  if (servicesLoading) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen
+          options={{
+            headerShown: true,
+            title: "Schedule Pickup",
+            headerStyle: { backgroundColor: colors.primary },
+            headerTintColor: "white",
+          }}
+        />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading services...</Text>
+        </View>
+      </View>
+    )
   }
 
   return (
@@ -75,25 +172,25 @@ export default function SchedulePickupScreen() {
             <Text style={styles.sectionSubtitle}>Choose the services you need</Text>
 
             {services.map((service) => {
-              const isSelected = selectedServices.includes(service.id)
+              const isSelected = selectedServices.includes(service._id)
               return (
                 <TouchableOpacity
-                  key={service.id}
+                  key={service._id}
                   style={[styles.serviceItem, isSelected && styles.serviceItemSelected]}
-                  onPress={() => toggleService(service.id)}
+                  onPress={() => toggleService(service._id)}
                 >
                   <View style={styles.serviceCheckbox}>
                     {isSelected && <Ionicons name="checkmark" size={16} color={colors.primary} />}
                   </View>
                   <View style={styles.serviceIcon}>
-                    <Ionicons name={service.icon as any} size={20} color={colors.textSecondary} />
+                    <Ionicons name={getServiceIcon(service.name) as any} size={20} color={colors.textSecondary} />
                   </View>
                   <View style={styles.serviceInfo}>
                     <Text style={styles.serviceName}>{service.name}</Text>
                     <Text style={styles.serviceDescription}>{service.description}</Text>
                   </View>
                   <View style={styles.servicePriceContainer}>
-                    <Text style={styles.servicePrice}>MWK {service.price}/kg</Text>
+                    <Text style={styles.servicePrice}>MWK {service.pricePerKg}/kg</Text>
                   </View>
                 </TouchableOpacity>
               )
@@ -171,7 +268,7 @@ export default function SchedulePickupScreen() {
               <Ionicons name="home" size={20} color={colors.textSecondary} />
               <View style={styles.locationInfo}>
                 <Text style={styles.locationTitle}>Home Address</Text>
-                <Text style={styles.locationAddress}>Namiwawa, Blantyre</Text>
+                <Text style={styles.locationAddress}>{user?.address || "Namiwawa, Blantyre"}</Text>
               </View>
             </View>
           </View>
@@ -200,11 +297,15 @@ export default function SchedulePickupScreen() {
               <Text style={styles.summaryPrice}>MWK {calculateTotal().toLocaleString()}/kg</Text>
             </View>
             <TouchableOpacity
-              style={[styles.scheduleButton, (!selectedDate || !selectedTime) && styles.scheduleButtonDisabled]}
+              style={[styles.scheduleButton, (!selectedDate || !selectedTime || loading) && styles.scheduleButtonDisabled]}
               onPress={handleSchedule}
-              disabled={!selectedDate || !selectedTime}
+              disabled={!selectedDate || !selectedTime || loading}
             >
-              <Text style={styles.scheduleButtonText}>Schedule Pickup</Text>
+              {loading ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text style={styles.scheduleButtonText}>Schedule Pickup</Text>
+              )}
             </TouchableOpacity>
           </View>
         )}
@@ -221,6 +322,16 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: colors.textSecondary,
   },
   section: {
     marginBottom: 30,

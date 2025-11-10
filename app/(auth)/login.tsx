@@ -1,63 +1,75 @@
 "use client"
 
+import { Ionicons } from "@expo/vector-icons"
+import { LinearGradient } from "expo-linear-gradient"
+import { Link, useRouter } from "expo-router"
 import { useState } from "react"
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native"
-import { LinearGradient } from "expo-linear-gradient"
-import { Ionicons } from "@expo/vector-icons"
-import { Link } from "expo-router"
-import { useAuth } from "../../contexts/AuthContext"
 import { colors } from "../../constants/theme"
+import { useAuth } from "../../contexts/AuthContext"
 
 export default function LoginScreen() {
-  const [phoneNumber, setPhoneNumber] = useState("")
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
+  const router = useRouter()
 
   const handleLogin = async () => {
-    if (!phoneNumber || !password) {
+    console.log("🔐 Login button pressed")
+    console.log("🔐 Login data:", { email, password: "***" })
+
+    if (!email || !password) {
       Alert.alert("Error", "Please fill in all fields")
       return
     }
 
     setLoading(true)
     try {
-      // Mock login - replace with actual API call
-      const userData = {
-        id: "user123",
-        name: "John Banda",
-        phoneNumber: phoneNumber,
-        email: "john.banda@email.com",
-        address: "Namiwawa, Blantyre",
-      }
-
-      await login(userData)
-    } catch (error) {
-      Alert.alert("Error", "Login failed. Please try again.")
+      console.log("🔐 Calling login function...")
+      await login(email, password)
+      console.log("✅ Login successful, navigating to tabs...")
+      
+      // Use setTimeout to ensure state is updated before navigation
+      setTimeout(() => {
+        router.replace("/(tabs)")
+      }, 100)
+    } catch (error: any) {
+      console.error("❌ Login error:", error)
+      Alert.alert("Error", error.message || "Login failed. Please try again.")
     } finally {
       setLoading(false)
+      console.log("🔐 Login process completed")
     }
   }
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+    <KeyboardAvoidingView 
+      style={styles.container} 
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
       <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.gradient}>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.header}>
             <View style={styles.logoContainer}>
               <Ionicons name="shirt" size={48} color="white" />
             </View>
-            <Text style={styles.title}>LaundryBT</Text>
+            <Text style={styles.title}>QuickSpin</Text>
             <Text style={styles.subtitle}>Laundry delivery in Blantyre</Text>
           </View>
 
@@ -66,13 +78,15 @@ export default function LoginScreen() {
             <Text style={styles.formSubtitle}>Sign in to your account</Text>
 
             <View style={styles.inputContainer}>
-              <Ionicons name="call" size={20} color={colors.textSecondary} style={styles.inputIcon} />
+              <Ionicons name="mail" size={20} color={colors.textSecondary} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="+265 888 123 456"
-                value={phoneNumber}
-                onChangeText={setPhoneNumber}
-                keyboardType="phone-pad"
+                placeholder="Enter your email"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
                 placeholderTextColor={colors.textSecondary}
               />
             </View>
@@ -86,6 +100,8 @@ export default function LoginScreen() {
                 onChangeText={setPassword}
                 secureTextEntry
                 placeholderTextColor={colors.textSecondary}
+                autoCorrect={false}
+                spellCheck={false}
               />
             </View>
 
@@ -94,7 +110,11 @@ export default function LoginScreen() {
               onPress={handleLogin}
               disabled={loading}
             >
-              <Text style={styles.loginButtonText}>{loading ? "Signing In..." : "Sign In"}</Text>
+              {loading ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text style={styles.loginButtonText}>Sign In</Text>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.forgotPassword}>
@@ -187,6 +207,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingHorizontal: 16,
     height: 56,
+    backgroundColor: colors.surface,
   },
   inputIcon: {
     marginRight: 12,
@@ -195,6 +216,8 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: colors.text,
+    padding: 0,
+    margin: 0,
   },
   loginButton: {
     backgroundColor: colors.primary,

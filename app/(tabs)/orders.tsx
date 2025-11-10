@@ -1,22 +1,79 @@
 import { Ionicons } from "@expo/vector-icons"
-import { Stack } from "expo-router"
-import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { Stack, useRouter } from "expo-router"
+import { useEffect, useState } from "react"
+import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native"
 import { colors } from "../../constants/theme"
+import { useAuth } from "../../contexts/AuthContext"
+import { apiService } from "../../hooks/services/api"
+
+interface Order {
+  _id: string;
+  orderId: string;
+  services: Array<{
+    serviceId: string;
+    name: string;
+    price: number;
+    quantity: number;
+  }>;
+  status: string;
+  totalPrice: number;
+  pickupDate: string;
+  deliveryDate: string;
+  location: {
+    address: string;
+    latitude?: number;
+    longitude?: number;
+  };
+  items: Array<{
+    name: string;
+    quantity: number;
+    weight: number;
+  }>;
+  progress: number;
+  createdAt: string;
+}
+
+interface Tracking {
+  _id: string;
+  orderId: string;
+  timeline: Array<{
+    step: string;
+    completed: boolean;
+    time?: string;
+    description: string;
+  }>;
+  currentStep: string;
+}
 
 export default function OrdersScreen() {
-  // Mock order data
-  const activeOrder = {
-    id: "ORD001",
-    services: ["wash", "iron", "fold"],
-    pickupTime: "2024-01-15T10:00:00Z",
-    deliveryTime: "2024-01-16T16:00:00Z",
-    status: "in_progress",
-    price: 2500,
-    location: {
-      address: "Namiwawa, Blantyre",
-      latitude: -15.7861,
-      longitude: 35.0058,
-    },
+  const router = useRouter()
+  const { user } = useAuth()
+  const [activeOrder, setActiveOrder] = useState<Order | null>(null)
+  const [tracking, setTracking] = useState<Tracking | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadActiveOrder()
+  }, [])
+
+  const loadActiveOrder = async () => {
+    try {
+      const orders = await apiService.getOrders()
+      // Find the most recent active order (not delivered or cancelled)
+      const active = orders.find((order: Order) => 
+        !['delivered', 'cancelled'].includes(order.status)
+      )
+      
+      if (active) {
+        setActiveOrder(active)
+        const trackingData = await apiService.getTracking(active._id)
+        setTracking(trackingData)
+      }
+    } catch (error) {
+      console.error('Error loading order:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const getStatusProgress = (status: string) => {
@@ -30,7 +87,7 @@ export default function OrdersScreen() {
       case "delivered":
         return 100
       default:
-        return 0
+        return activeOrder?.progress || 0
     }
   }
 
@@ -51,40 +108,93 @@ export default function OrdersScreen() {
 
   const trackingSteps = [
     {
-      id: "pending",
+      id: "order_placed",
       title: "Order Confirmed",
       description: "Your order has been received",
       icon: "checkmark-circle",
-      time: "10:00 AM",
+    },
+    {
+      id: "pickup_scheduled", 
+      title: "Pickup Scheduled",
+      description: "Pickup has been scheduled",
+      icon: "calendar",
     },
     {
       id: "picked_up",
       title: "Picked Up",
       description: "Items collected from your location",
       icon: "cube",
-      time: "11:30 AM",
     },
     {
       id: "in_progress",
       title: "In Progress",
       description: "Your laundry is being processed",
       icon: "time",
-      time: "2:00 PM",
+    },
+    {
+      id: "ready_for_delivery",
+      title: "Ready for Delivery",
+      description: "Order is ready for delivery",
+      icon: "checkmark-done",
     },
     {
       id: "delivered",
       title: "Delivered",
       description: "Order delivered to your location",
       icon: "car",
-      time: "Expected 4:00 PM",
     },
   ]
 
-  const getCurrentStepIndex = (status: string) => {
-    return trackingSteps.findIndex((step) => step.id === status)
+  const getCurrentStepIndex = (currentStep: string) => {
+    return trackingSteps.findIndex((step) => step.id === currentStep)
   }
 
-  const currentStepIndex = getCurrentStepIndex(activeOrder.status)
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Stack.Screen
+          options={{
+            headerShown: true,
+            title: "Track Orders",
+            headerStyle: { backgroundColor: colors.primary },
+            headerTintColor: "white",
+          }}
+        />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading your orders...</Text>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  if (!activeOrder) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Stack.Screen
+          options={{
+            headerShown: true,
+            title: "Track Orders",
+            headerStyle: { backgroundColor: colors.primary },
+            headerTintColor: "white",
+          }}
+        />
+        <View style={styles.noOrdersContainer}>
+          <Ionicons name="cube-outline" size={64} color={colors.textSecondary} />
+          <Text style={styles.noOrdersTitle}>No Active Orders</Text>
+          <Text style={styles.noOrdersText}>You don't have any active orders at the moment.</Text>
+          <TouchableOpacity 
+            style={styles.scheduleButton}
+            onPress={() => router.push("/(tabs)/schedule")}
+          >
+            <Text style={styles.scheduleButtonText}>Schedule a Pickup</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  const currentStepIndex = getCurrentStepIndex(tracking?.currentStep || 'order_placed')
   const progress = getStatusProgress(activeOrder.status)
 
   return (
@@ -103,8 +213,10 @@ export default function OrdersScreen() {
           <View style={styles.orderSummary}>
             <View style={styles.orderHeader}>
               <View>
-                <Text style={styles.orderId}>Order #{activeOrder.id}</Text>
-                <Text style={styles.orderDate}>{new Date(activeOrder.pickupTime).toLocaleDateString()}</Text>
+                <Text style={styles.orderId}>Order #{activeOrder.orderId}</Text>
+                <Text style={styles.orderDate}>
+                  {new Date(activeOrder.pickupDate).toLocaleDateString()}
+                </Text>
               </View>
               <View style={[styles.statusBadge, { backgroundColor: getStatusColor(activeOrder.status) + "20" }]}>
                 <Text style={[styles.statusText, { color: getStatusColor(activeOrder.status) }]}>
@@ -116,11 +228,13 @@ export default function OrdersScreen() {
             <View style={styles.orderDetails}>
               <View style={styles.orderDetailRow}>
                 <Text style={styles.orderDetailLabel}>Services</Text>
-                <Text style={styles.orderDetailValue}>{activeOrder.services.join(", ").toUpperCase()}</Text>
+                <Text style={styles.orderDetailValue}>
+                  {activeOrder.services.map(s => s.name).join(", ")}
+                </Text>
               </View>
               <View style={styles.orderDetailRow}>
                 <Text style={styles.orderDetailLabel}>Total</Text>
-                <Text style={styles.orderDetailValue}>MWK {activeOrder.price.toLocaleString()}</Text>
+                <Text style={styles.orderDetailValue}>MWK {activeOrder.totalPrice.toLocaleString()}</Text>
               </View>
               <View style={styles.orderDetailRow}>
                 <Ionicons name="location" size={16} color={colors.textSecondary} />
@@ -137,12 +251,14 @@ export default function OrdersScreen() {
                 <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
               </View>
             </View>
+            <Text style={styles.progressText}>{progress}% Complete</Text>
           </View>
 
           {/* Tracking Steps */}
           <View style={styles.trackingSteps}>
             {trackingSteps.map((step, index) => {
-              const isCompleted = index <= currentStepIndex
+              const timelineStep = tracking?.timeline.find(ts => ts.step === step.title)
+              const isCompleted = timelineStep?.completed || index < currentStepIndex
               const isCurrent = index === currentStepIndex
 
               return (
@@ -184,7 +300,9 @@ export default function OrdersScreen() {
                       >
                         {step.title}
                       </Text>
-                      <Text style={styles.stepTime}>{step.time}</Text>
+                      <Text style={styles.stepTime}>
+                        {timelineStep?.time ? new Date(timelineStep.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                      </Text>
                     </View>
                     <Text style={styles.stepDescription}>{step.description}</Text>
                   </View>
@@ -222,7 +340,7 @@ export default function OrdersScreen() {
               <View>
                 <Text style={styles.deliveryTitle}>Estimated Delivery</Text>
                 <Text style={styles.deliveryTime}>
-                  {new Date(activeOrder.deliveryTime).toLocaleDateString()} at 4:00 PM
+                  {new Date(activeOrder.deliveryDate).toLocaleDateString()} at 4:00 PM
                 </Text>
               </View>
             </View>
@@ -251,6 +369,46 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: colors.textSecondary,
+  },
+  noOrdersContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  noOrdersTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  noOrdersText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  scheduleButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  scheduleButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
   orderSummary: {
     backgroundColor: "white",
@@ -312,6 +470,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     marginLeft: 8,
+    flex: 1,
   },
   progressSection: {
     backgroundColor: "white",
@@ -334,7 +493,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   progressBarContainer: {
-    marginBottom: 16,
+    marginBottom: 8,
   },
   progressBarBackground: {
     height: 8,
@@ -346,6 +505,11 @@ const styles = StyleSheet.create({
     height: "100%",
     backgroundColor: colors.primary,
     borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: "center",
   },
   trackingSteps: {
     backgroundColor: "white",

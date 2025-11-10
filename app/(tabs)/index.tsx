@@ -2,34 +2,111 @@
 
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { useEffect, useState } from "react"
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { Badge } from "../../components/ui/badge"
 import { Button } from "../../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
 import { colors } from "../../constants/theme"
 import { useAuth } from "../../contexts/AuthContext"
+import { apiService } from "../../hooks/services/api"
+
+interface Service {
+  _id: string;
+  name: string;
+  description: string;
+  pricePerKg: number;
+  icon: string;
+}
+
+interface Order {
+  _id: string;
+  orderId: string;
+  status: string;
+  items: Array<{ name: string; quantity: number }>;
+  createdAt: string;
+  totalPrice: number;
+}
 
 export default function HomeScreen() {
   const { user } = useAuth()
   const router = useRouter()
+  const [services, setServices] = useState<Service[]>([])
+  const [recentOrders, setRecentOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const services = [
-    { id: 1, name: "Wash & Fold", price: "MK 2,500", icon: "shirt" },
-    { id: 2, name: "Dry Cleaning", price: "MK 5,000", icon: "sparkles" },
-    { id: 3, name: "Iron Only", price: "MK 1,500", icon: "flame" },
-    { id: 4, name: "Express Service", price: "MK 3,500", icon: "flash" },
-  ]
+  useEffect(() => {
+    loadData()
+  }, [user])
 
-  const recentOrders = [
-    { id: 1, status: "In Progress", items: 5, date: "Today" },
-    { id: 2, status: "Completed", items: 3, date: "Yesterday" },
-  ]
+  const loadData = async () => {
+    try {
+      const servicesData = await apiService.getServices()
+      setServices(servicesData.slice(0, 4))
+      
+      if (user) {
+        const ordersData = await apiService.getOrders().catch(() => [])
+        setRecentOrders(ordersData.slice(0, 2))
+      }
+    } catch (error) {
+      console.error('Error loading data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const formatPrice = (price: number) => {
+    return `MK ${price.toLocaleString()}/kg`
+  }
+
+  const getServiceIcon = (serviceName: string) => {
+    const iconMap: { [key: string]: string } = {
+      'Wash': 'shirt',
+      'Dry': 'sunny',
+      'Iron': 'flame',
+      'Fold': 'layers',
+      'Wash & Fold': 'shirt',
+      'Dry Cleaning': 'sparkles'
+    }
+    return iconMap[serviceName] || 'shirt'
+  }
+
+  const getStatusBadgeVariant = (status: string) => {
+    const statusMap: { [key: string]: 'success' | 'warning' | 'error' } = {
+      'delivered': 'success',
+      'completed': 'success',
+      'in_progress': 'warning',
+      'pending': 'warning',
+      'cancelled': 'error'
+    }
+    return statusMap[status] || 'warning'
+  }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    const today = new Date()
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+
+    if (date.toDateString() === today.toDateString()) return 'Today'
+    if (date.toDateString() === yesterday.toDateString()) return 'Yesterday'
+    return date.toLocaleDateString()
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    )
+  }
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>Hello, {user?.name?.split(" ")[0]}!</Text>
+          <Text style={styles.greeting}>Hello, {user?.name?.split(" ")[0] || 'Guest'}!</Text>
           <Text style={styles.subGreeting}>What can we help you with today?</Text>
         </View>
         <TouchableOpacity style={styles.notificationButton}>
@@ -46,7 +123,7 @@ export default function HomeScreen() {
             <Button onPress={() => router.push("/(tabs)/schedule")} style={styles.actionButton}>
               Schedule Pickup
             </Button>
-            <Button variant="outline" onPress={() => router.push("/(tabs)/tracking")} style={styles.actionButton}>
+            <Button variant="outline" onPress={() => router.push("/(tabs)/orders")} style={styles.actionButton}>
               Track Order
             </Button>
           </View>
@@ -57,33 +134,47 @@ export default function HomeScreen() {
         <Text style={styles.sectionTitle}>Our Services</Text>
         <View style={styles.servicesGrid}>
           {services.map((service) => (
-            <TouchableOpacity key={service.id} style={styles.serviceCard}>
+            <TouchableOpacity 
+              key={service._id} 
+              style={styles.serviceCard}
+              onPress={() => router.push("/(tabs)/schedule")}
+            >
               <View style={styles.serviceIcon}>
-                <Ionicons name={service.icon as any} size={24} color={colors.primary} />
+                <Ionicons name={getServiceIcon(service.name) as any} size={24} color={colors.primary} />
               </View>
               <Text style={styles.serviceName}>{service.name}</Text>
-              <Text style={styles.servicePrice}>{service.price}</Text>
+              <Text style={styles.servicePrice}>{formatPrice(service.pricePerKg)}</Text>
             </TouchableOpacity>
           ))}
         </View>
       </View>
 
-      <Card style={styles.recentOrders}>
-        <CardHeader>
-          <CardTitle>Recent Orders</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {recentOrders.map((order) => (
-            <View key={order.id} style={styles.orderItem}>
-              <View style={styles.orderInfo}>
-                <Text style={styles.orderDate}>{order.date}</Text>
-                <Text style={styles.orderItems}>{order.items} items</Text>
-              </View>
-              <Badge variant={order.status === "Completed" ? "success" : "warning"}>{order.status}</Badge>
-            </View>
-          ))}
-        </CardContent>
-      </Card>
+      {recentOrders.length > 0 && (
+        <Card style={styles.recentOrders}>
+          <CardHeader>
+            <CardTitle>Recent Orders</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {recentOrders.map((order) => (
+              <TouchableOpacity 
+                key={order._id} 
+                style={styles.orderItem}
+                onPress={() => router.push(`/(tabs)/orders`)}
+              >
+                <View style={styles.orderInfo}>
+                  <Text style={styles.orderDate}>{formatDate(order.createdAt)}</Text>
+                  <Text style={styles.orderItems}>
+                    {order.items?.reduce((total, item) => total + item.quantity, 0) || 0} items • MK {order.totalPrice.toLocaleString()}
+                  </Text>
+                </View>
+                <Badge variant={getStatusBadgeVariant(order.status)}>
+                  {order.status.replace('_', ' ').toUpperCase()}
+                </Badge>
+              </TouchableOpacity>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </ScrollView>
   )
 }
@@ -92,6 +183,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.surface,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: colors.textSecondary,
   },
   header: {
     flexDirection: "row",
