@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons"
-import { Stack, useRouter } from "expo-router"
-import { useEffect, useState } from "react"
+import { Stack, useRouter, useFocusEffect } from "expo-router"
+import { useState, useCallback } from "react"
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from "react-native"
 import { colors } from "../../constants/theme"
 import { useAuth } from "../../contexts/AuthContext"
@@ -52,9 +52,11 @@ export default function OrdersScreen() {
   const [tracking, setTracking] = useState<Tracking | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    loadActiveOrder()
-  }, [])
+  useFocusEffect(
+    useCallback(() => {
+      loadActiveOrder()
+    }, [])
+  )
 
   const loadActiveOrder = async () => {
     try {

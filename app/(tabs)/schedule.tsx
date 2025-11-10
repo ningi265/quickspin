@@ -104,12 +104,15 @@ export default function SchedulePickupScreen() {
         ]
       }
 
-      await apiService.createOrder(orderData)
+      const newOrder = await apiService.createOrder(orderData)
       
       Alert.alert("Success", "Your pickup has been scheduled successfully!", [
         { 
           text: "Track Order", 
-          onPress: () => router.push("/(tabs)/orders") 
+          onPress: () => router.push({
+            pathname: "/(tabs)/tracking",
+            params: { order: JSON.stringify(newOrder) }
+          }) 
         },
         { 
           text: "OK", 
