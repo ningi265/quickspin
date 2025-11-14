@@ -1,87 +1,146 @@
-"use client"
-
 import { Ionicons } from "@expo/vector-icons"
-import { Stack } from "expo-router"
-import { useState } from "react"
-import { SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
+import { Stack, useFocusEffect, useRouter } from "expo-router"
+import { useCallback, useState } from "react"
+import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native"
 import { colors } from "../../constants/theme"
+import { apiService } from "../../hooks/services/api"
+
+interface Order {
+  _id: string;
+  orderId: string;
+  services: Array<{
+    serviceId: string;
+    name: string;
+    price: number;
+    quantity: number;
+  }>;
+  status: string;
+  totalPrice: number;
+  pickupDate: string;
+  deliveryDate: string;
+  location: {
+    address: string;
+    latitude?: number;
+    longitude?: number;
+  };
+  items: Array<{
+    name: string;
+    quantity: number;
+    weight: number;
+  }>;
+  createdAt: string;
+}
 
 export default function OrderHistoryScreen() {
+  const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
+  const [orders, setOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState(true)
 
-  // Mock orders data
-  const orders = [
-    {
-      id: "ORD001",
-      services: ["wash", "iron", "fold"],
-      pickupTime: "2024-01-15T10:00:00Z",
-      deliveryTime: "2024-01-16T16:00:00Z",
-      status: "in_progress",
-      price: 2500,
-      location: {
-        address: "Namiwawa, Blantyre",
-        latitude: -15.7861,
-        longitude: 35.0058,
-      },
-    },
-    {
-      id: "ORD002",
-      services: ["wash", "dry"],
-      pickupTime: "2024-01-10T14:00:00Z",
-      deliveryTime: "2024-01-11T18:00:00Z",
-      status: "delivered",
-      price: 1800,
-      location: {
-        address: "Sunnyside, Blantyre",
-        latitude: -15.7861,
-        longitude: 35.0058,
-      },
-    },
-    {
-      id: "ORD003",
-      services: ["iron"],
-      pickupTime: "2024-01-08T09:00:00Z",
-      deliveryTime: "2024-01-08T17:00:00Z",
-      status: "delivered",
-      price: 1200,
-      location: {
-        address: "Limbe, Blantyre",
-        latitude: -15.7861,
-        longitude: 35.0058,
-      },
-    },
-  ]
+  useFocusEffect(
+    useCallback(() => {
+      loadOrders()
+    }, [])
+  )
+
+  const loadOrders = async () => {
+    try {
+      const ordersData = await apiService.getOrders()
+      setOrders(ordersData)
+    } catch (error) {
+      console.error('Error loading orders:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleOrderPress = (order: Order) => {
+    router.push({
+      pathname: "/tracking",
+      params: { order: JSON.stringify(order) }
+    })
+  }
+
+  const handleReorder = (order: Order) => {
+    // Navigate to schedule screen with order details for reordering
+    router.push({
+      pathname: "/(tabs)/schedule",
+      params: { reorder: JSON.stringify(order) }
+    })
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "pending":
         return colors.warning
+      case "pickup_scheduled":
+        return colors.primary
       case "picked_up":
         return colors.primary
       case "in_progress":
         return colors.warning
+      case "ready_for_delivery":
+        return colors.success
       case "delivered":
         return colors.success
+      case "cancelled":
+        return colors.error
       default:
         return colors.textSecondary
     }
   }
 
+  const getStatusText = (status: string) => {
+    return status.replace(/_/g, " ").toUpperCase()
+  }
+
   const filteredOrders = orders.filter((order) => {
     const matchesSearch =
-      order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.location.address.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesFilter = filterStatus === "all" || order.status === filterStatus
+      order.orderId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.location.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      order.services.some(service => 
+        service.name.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    
+    const matchesFilter = 
+      filterStatus === "all" || 
+      (filterStatus === "active" && !['delivered', 'cancelled'].includes(order.status)) ||
+      (filterStatus === "completed" && ['delivered'].includes(order.status)) ||
+      order.status === filterStatus
+    
     return matchesSearch && matchesFilter
   })
 
   const filters = [
     { id: "all", label: "All" },
-    { id: "pending", label: "Pending" },
-    { id: "in_progress", label: "Active" },
-    { id: "delivered", label: "Completed" },
+    { id: "active", label: "Active" },
+    { id: "completed", label: "Completed" },
+    { id: "cancelled", label: "Cancelled" },
   ]
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString()
+  }
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Stack.Screen
+          options={{
+            headerShown: true,
+            title: "Order History",
+            headerStyle: { backgroundColor: colors.primary },
+            headerTintColor: "white",
+          }}
+        />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading order history...</Text>
+        </View>
+      </SafeAreaView>
+    )
+  }
 
   return (
     <>
@@ -137,48 +196,75 @@ export default function OrderHistoryScreen() {
           {filteredOrders.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="cube-outline" size={64} color={colors.textSecondary} />
-              <Text style={styles.emptyStateTitle}>No orders found</Text>
-              <Text style={styles.emptyStateSubtitle}>
-                {searchQuery ? "Try adjusting your search" : "Your orders will appear here"}
+              <Text style={styles.emptyStateTitle}>
+                {searchQuery || filterStatus !== "all" ? "No orders found" : "No orders yet"}
               </Text>
+              <Text style={styles.emptyStateSubtitle}>
+                {searchQuery ? "Try adjusting your search" : 
+                 filterStatus !== "all" ? "No orders match this filter" : 
+                 "Your orders will appear here"}
+              </Text>
+              {!searchQuery && filterStatus === "all" && (
+                <TouchableOpacity 
+                  style={styles.scheduleButton}
+                  onPress={() => router.push("/(tabs)/schedule")}
+                >
+                  <Text style={styles.scheduleButtonText}>Schedule Your First Order</Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : (
             filteredOrders.map((order) => (
-              <TouchableOpacity key={order.id} style={styles.orderCard}>
+              <TouchableOpacity 
+                key={order._id} 
+                style={styles.orderCard}
+                onPress={() => handleOrderPress(order)}
+              >
                 <View style={styles.orderHeader}>
                   <View>
-                    <Text style={styles.orderId}>Order #{order.id}</Text>
+                    <Text style={styles.orderId}>Order #{order.orderId}</Text>
                     <View style={styles.orderDate}>
                       <Ionicons name="calendar" size={12} color={colors.textSecondary} />
-                      <Text style={styles.orderDateText}>{new Date(order.pickupTime).toLocaleDateString()}</Text>
+                      <Text style={styles.orderDateText}>
+                        Placed on {formatDate(order.createdAt)}
+                      </Text>
                     </View>
                   </View>
                   <View style={styles.orderActions}>
                     <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) + "20" }]}>
                       <Text style={[styles.statusText, { color: getStatusColor(order.status) }]}>
-                        {order.status.replace("_", " ").toUpperCase()}
+                        {getStatusText(order.status)}
                       </Text>
                     </View>
-                    <TouchableOpacity style={styles.moreButton}>
-                      <Ionicons name="ellipsis-vertical" size={16} color={colors.textSecondary} />
-                    </TouchableOpacity>
                   </View>
                 </View>
 
                 <View style={styles.orderDetails}>
                   <View style={styles.orderDetailRow}>
                     <Text style={styles.orderDetailLabel}>Services</Text>
-                    <Text style={styles.orderDetailValue}>{order.services.join(", ").toUpperCase()}</Text>
+                    <Text style={styles.orderDetailValue}>
+                      {order.services.map(s => s.name).join(", ")}
+                    </Text>
                   </View>
 
                   <View style={styles.orderDetailRow}>
                     <Text style={styles.orderDetailLabel}>Total</Text>
                     <Text style={[styles.orderDetailValue, { color: colors.primary }]}>
-                      MWK {order.price.toLocaleString()}
+                      MWK {order.totalPrice.toLocaleString()}
                     </Text>
                   </View>
 
                   <View style={styles.orderDetailRow}>
+                    <Text style={styles.orderDetailLabel}>Pickup</Text>
+                    <Text style={styles.orderDetailValue}>{formatDate(order.pickupDate)}</Text>
+                  </View>
+
+                  <View style={styles.orderDetailRow}>
+                    <Text style={styles.orderDetailLabel}>Delivery</Text>
+                    <Text style={styles.orderDetailValue}>{formatDate(order.deliveryDate)}</Text>
+                  </View>
+
+                  <View style={styles.locationRow}>
                     <Ionicons name="location" size={12} color={colors.textSecondary} />
                     <Text style={styles.orderDetailAddress}>{order.location.address}</Text>
                   </View>
@@ -188,7 +274,10 @@ export default function OrderHistoryScreen() {
                 <View style={styles.orderActionButtons}>
                   {order.status === "delivered" ? (
                     <>
-                      <TouchableOpacity style={styles.actionButton}>
+                      <TouchableOpacity 
+                        style={styles.actionButton}
+                        onPress={() => handleReorder(order)}
+                      >
                         <Text style={styles.actionButtonText}>Reorder</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.actionButton}>
@@ -197,7 +286,10 @@ export default function OrderHistoryScreen() {
                     </>
                   ) : (
                     <>
-                      <TouchableOpacity style={styles.actionButton}>
+                      <TouchableOpacity 
+                        style={styles.actionButton}
+                        onPress={() => handleOrderPress(order)}
+                      >
                         <Text style={styles.actionButtonText}>Track Order</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.actionButton}>
@@ -221,7 +313,7 @@ export default function OrderHistoryScreen() {
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Text style={[styles.statNumber, { color: colors.success }]}>
-                MWK {filteredOrders.reduce((sum, order) => sum + order.price, 0).toLocaleString()}
+                MWK {filteredOrders.reduce((sum, order) => sum + order.totalPrice, 0).toLocaleString()}
               </Text>
               <Text style={styles.statLabel}>Total Spent</Text>
             </View>
@@ -243,6 +335,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: colors.textSecondary,
   },
   searchSection: {
     flexDirection: "row",
@@ -325,6 +427,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     textAlign: "center",
+    marginBottom: 16,
+  },
+  scheduleButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  scheduleButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
   orderCard: {
     backgroundColor: "white",
@@ -375,9 +489,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "600",
   },
-  moreButton: {
-    padding: 4,
-  },
   orderDetails: {
     gap: 8,
     marginBottom: 16,
@@ -387,9 +498,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+  },
   orderDetailLabel: {
     fontSize: 14,
     color: colors.textSecondary,
+    fontWeight: "500",
   },
   orderDetailValue: {
     fontSize: 14,
@@ -400,6 +517,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     marginLeft: 8,
+    flex: 1,
   },
   orderActionButtons: {
     flexDirection: "row",

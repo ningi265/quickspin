@@ -17,7 +17,13 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.legend265.laundry",
+       "softwareKeyboardLayoutMode": "resize",
+      "navigationBar": {
+        "backgroundColor": "#ffffff",
+        "visible": "immersive"
+      }
     },
     "web": {
       "bundler": "metro",
@@ -39,6 +45,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "525e7b2b-bc43-4724-a84f-fddb8ae41bad"
+      }
     }
   }
 }

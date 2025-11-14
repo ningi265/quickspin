@@ -2,9 +2,9 @@
 "use client"
 
 import AsyncStorage from "@react-native-async-storage/async-storage"
-import { Platform } from "react-native"
 import type React from "react"
 import { createContext, useContext, useEffect, useState } from "react"
+import { Platform } from "react-native"
 
 interface User {
   id: string
@@ -30,12 +30,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 const getApiBaseUrl = () => {
   if (__DEV__) {
     if (Platform.OS === 'android') {
-      return 'http://192.168.44.245:4000/api'
+      return 'https://quickspin.nexusmwi.com/api'
     } else {
-      return 'http://192.168.44.245:4000/api'
+      return 'https://quickspin.nexusmwi.com/api'
     }
   }
-  return 'https://your-production-url.com/api'
+  return 'https://quickspin.nexusmwi.com/api'
 }
 
 const API_BASE_URL = getApiBaseUrl()

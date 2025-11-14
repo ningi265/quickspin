@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Configuration - UPDATE THIS WITH YOUR ACTUAL IP ADDRESS
-const API_BASE_URL = 'http://192.168.44.245:4000/api'; 
+const API_BASE_URL = 'https://quickspin.nexusmwi.com/api'; 
 
 class ApiService {
   private async getAuthHeaders() {

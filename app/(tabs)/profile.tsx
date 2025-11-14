@@ -1,13 +1,67 @@
-"use client"
-
 import { Ionicons } from "@expo/vector-icons"
-import { Stack } from "expo-router"
-import { Alert, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { Stack, useFocusEffect } from "expo-router"
+import { useCallback, useState } from "react"
+import { ActivityIndicator, Alert, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { colors } from "../../constants/theme"
 import { useAuth } from "../../contexts/AuthContext"
+import { apiService } from "../../hooks/services/api"
+
+interface Order {
+  _id: string;
+  orderId: string;
+  status: string;
+  totalPrice: number;
+  createdAt: string;
+}
+
+interface UserStats {
+  totalOrders: number;
+  totalSpent: number;
+  completedOrders: number;
+  averageRating?: number;
+}
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth()
+  const [userStats, setUserStats] = useState<UserStats>({
+    totalOrders: 0,
+    totalSpent: 0,
+    completedOrders: 0,
+    averageRating: 4.8
+  })
+  const [loading, setLoading] = useState(true)
+
+  useFocusEffect(
+    useCallback(() => {
+      loadUserStats()
+    }, [])
+  )
+
+  const loadUserStats = async () => {
+    try {
+      const orders = await apiService.getOrders()
+      
+      const stats: UserStats = {
+        totalOrders: orders.length,
+        totalSpent: orders.reduce((sum: number, order: Order) => sum + order.totalPrice, 0),
+        completedOrders: orders.filter((order: Order) => order.status === 'delivered').length,
+        averageRating: 4.8 // You can calculate this from ratings if available
+      }
+      
+      setUserStats(stats)
+    } catch (error) {
+      console.error('Error loading user stats:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const getMemberSince = () => {
+    if (!user?.createdAt) return 'Member since 2024'
+    
+    const joinDate = new Date(user.createdAt)
+    return `Member since ${joinDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
+  }
 
   const menuItems = [
     {
@@ -37,6 +91,25 @@ export default function ProfileScreen() {
     ])
   }
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Stack.Screen
+          options={{
+            headerShown: true,
+            title: "Profile",
+            headerStyle: { backgroundColor: colors.primary },
+            headerTintColor: "white",
+          }}
+        />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading profile...</Text>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
   return (
     <>
       <Stack.Screen
@@ -56,8 +129,8 @@ export default function ProfileScreen() {
                 <Ionicons name="person" size={32} color="white" />
               </View>
               <View style={styles.userInfo}>
-                <Text style={styles.userName}>{user?.name}</Text>
-                <Text style={styles.memberSince}>Member since Jan 2024</Text>
+                <Text style={styles.userName}>{user?.name || 'User'}</Text>
+                <Text style={styles.memberSince}>{getMemberSince()}</Text>
               </View>
               <TouchableOpacity style={styles.editButton}>
                 <Ionicons name="create" size={20} color="white" />
@@ -73,7 +146,7 @@ export default function ProfileScreen() {
                 <Ionicons name="call" size={20} color={colors.textSecondary} />
                 <View style={styles.infoContent}>
                   <Text style={styles.infoLabel}>Phone Number</Text>
-                  <Text style={styles.infoValue}>{user?.phoneNumber}</Text>
+                  <Text style={styles.infoValue}>{user?.phoneNumber || 'Not provided'}</Text>
                 </View>
               </View>
 
@@ -81,7 +154,7 @@ export default function ProfileScreen() {
                 <Ionicons name="mail" size={20} color={colors.textSecondary} />
                 <View style={styles.infoContent}>
                   <Text style={styles.infoLabel}>Email Address</Text>
-                  <Text style={styles.infoValue}>{user?.email}</Text>
+                  <Text style={styles.infoValue}>{user?.email || 'Not provided'}</Text>
                 </View>
               </View>
 
@@ -89,7 +162,9 @@ export default function ProfileScreen() {
                 <Ionicons name="location" size={20} color={colors.textSecondary} />
                 <View style={styles.infoContent}>
                   <Text style={styles.infoLabel}>Address</Text>
-                  <Text style={styles.infoValue}>{user?.address}</Text>
+                  <Text style={styles.infoValue}>
+                    {user?.address || 'Not provided'}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -100,18 +175,56 @@ export default function ProfileScreen() {
             <Text style={styles.sectionTitle}>Account Summary</Text>
             <View style={styles.statsCard}>
               <View style={styles.statItem}>
-                <Text style={styles.statNumber}>12</Text>
+                <Text style={styles.statNumber}>{userStats.totalOrders}</Text>
                 <Text style={styles.statLabel}>Total Orders</Text>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
-                <Text style={[styles.statNumber, { color: colors.success }]}>MWK 28K</Text>
+                <Text style={[styles.statNumber, { color: colors.success }]}>
+                  MWK {userStats.totalSpent.toLocaleString()}
+                </Text>
                 <Text style={styles.statLabel}>Total Spent</Text>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
-                <Text style={[styles.statNumber, { color: colors.warning }]}>4.8</Text>
+                <Text style={[styles.statNumber, { color: colors.warning }]}>
+                  {userStats.averageRating}
+                </Text>
                 <Text style={styles.statLabel}>Rating</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Detailed Stats */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Order Statistics</Text>
+            <View style={styles.detailedStatsCard}>
+              <View style={styles.detailedStatItem}>
+                <Ionicons name="checkmark-circle" size={24} color={colors.success} />
+                <View style={styles.detailedStatContent}>
+                  <Text style={styles.detailedStatNumber}>{userStats.completedOrders}</Text>
+                  <Text style={styles.detailedStatLabel}>Completed Orders</Text>
+                </View>
+              </View>
+              <View style={styles.detailedStatDivider} />
+              <View style={styles.detailedStatItem}>
+                <Ionicons name="time" size={24} color={colors.warning} />
+                <View style={styles.detailedStatContent}>
+                  <Text style={styles.detailedStatNumber}>
+                    {userStats.totalOrders - userStats.completedOrders}
+                  </Text>
+                  <Text style={styles.detailedStatLabel}>Active Orders</Text>
+                </View>
+              </View>
+              <View style={styles.detailedStatDivider} />
+              <View style={styles.detailedStatItem}>
+                <Ionicons name="trending-up" size={24} color={colors.primary} />
+                <View style={styles.detailedStatContent}>
+                  <Text style={styles.detailedStatNumber}>
+                    {userStats.totalOrders > 0 ? Math.round(userStats.totalSpent / userStats.totalOrders) : 0}
+                  </Text>
+                  <Text style={styles.detailedStatLabel}>Avg. Order</Text>
+                </View>
               </View>
             </View>
           </View>
@@ -166,6 +279,16 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: colors.textSecondary,
   },
   header: {
     backgroundColor: colors.primary,
@@ -262,6 +385,46 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 4,
+  },
+  detailedStatsCard: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 20,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  detailedStatItem: {
+    flex: 1,
+    alignItems: "center",
+  },
+  detailedStatContent: {
+    alignItems: "center",
+    marginTop: 8,
+  },
+  detailedStatNumber: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: colors.text,
+    marginBottom: 2,
+  },
+  detailedStatLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    textAlign: "center",
+  },
+  detailedStatDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: colors.border,
   },
   statItem: {
     alignItems: "center",

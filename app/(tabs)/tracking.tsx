@@ -1,12 +1,12 @@
 import { Ionicons } from "@expo/vector-icons"
 import { useLocalSearchParams } from "expo-router"
 import { useEffect, useState } from "react"
-import { ScrollView, StyleSheet, Text, View } from "react-native"
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native"
 import { Badge } from "../../components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card"
 import { Progress } from "../../components/ui/progress"
 import { colors } from "../../constants/theme"
-
+import { apiService } from "../../hooks/services/api"
 
 export default function TrackingScreen() {
   const params = useLocalSearchParams()
@@ -153,7 +153,6 @@ export default function TrackingScreen() {
   )
 }
 
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -273,5 +272,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: colors.surface,
   },
 })

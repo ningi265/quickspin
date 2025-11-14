@@ -1,5 +1,3 @@
-"use client"
-
 import { Ionicons } from "@expo/vector-icons"
 import { Stack, router } from "expo-router"
 import { useEffect, useState } from "react"
@@ -16,6 +14,13 @@ interface Service {
   icon: string;
 }
 
+interface TimeSlot {
+  id: string;
+  startTime: string;
+  endTime: string;
+  available: boolean;
+}
+
 export default function SchedulePickupScreen() {
   const { user } = useAuth()
   const [services, setServices] = useState<Service[]>([])
@@ -25,10 +30,19 @@ export default function SchedulePickupScreen() {
   const [notes, setNotes] = useState("")
   const [loading, setLoading] = useState(false)
   const [servicesLoading, setServicesLoading] = useState(true)
+  const [availableDates, setAvailableDates] = useState<Array<{date: string, day: string, available: boolean}>>([])
+  const [availableTimeSlots, setAvailableTimeSlots] = useState<TimeSlot[]>([])
 
   useEffect(() => {
     loadServices()
+    loadAvailableDates()
   }, [])
+
+  useEffect(() => {
+    if (selectedDate) {
+      loadAvailableTimeSlots(selectedDate)
+    }
+  }, [selectedDate])
 
   const loadServices = async () => {
     try {
@@ -42,15 +56,54 @@ export default function SchedulePickupScreen() {
     }
   }
 
-  const timeSlots = ["08:00 - 10:00", "10:00 - 12:00", "12:00 - 14:00", "14:00 - 16:00", "16:00 - 18:00"]
+  const loadAvailableDates = async () => {
+    try {
+      // Get dates for the next 7 days
+      const dates = []
+      const today = new Date()
+      
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(today)
+        date.setDate(today.getDate() + i)
+        
+        const dateString = date.toISOString().split('T')[0]
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+        const dayName = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : dayNames[date.getDay()]
+        
+        // In a real app, you'd check availability with the API
+        const available = date.getDay() !== 0 // Not available on Sundays
+        
+        dates.push({
+          date: dateString,
+          day: dayName,
+          available
+        })
+      }
+      
+      setAvailableDates(dates)
+    } catch (error) {
+      console.error('Error loading available dates:', error)
+    }
+  }
 
-  const dates = [
-    { date: "2024-01-15", day: "Today", available: true },
-    { date: "2024-01-16", day: "Tomorrow", available: true },
-    { date: "2024-01-17", day: "Wed", available: true },
-    { date: "2024-01-18", day: "Thu", available: false },
-    { date: "2024-01-19", day: "Fri", available: true },
-  ]
+  const loadAvailableTimeSlots = async (date: string) => {
+    try {
+      // In a real app, you'd fetch available time slots from the API
+      // For now, we'll generate them dynamically
+      const timeSlots: TimeSlot[] = [
+        { id: '1', startTime: '08:00', endTime: '10:00', available: true },
+        { id: '2', startTime: '10:00', endTime: '12:00', available: true },
+        { id: '3', startTime: '12:00', endTime: '14:00', available: true },
+        { id: '4', startTime: '14:00', endTime: '16:00', available: true },
+        { id: '5', startTime: '16:00', endTime: '18:00', available: true },
+      ]
+      
+      setAvailableTimeSlots(timeSlots)
+      setSelectedTime("") // Reset selected time when date changes
+    } catch (error) {
+      console.error('Error loading time slots:', error)
+    }
+  }
 
   const toggleService = (serviceId: string) => {
     setSelectedServices((prev) =>
@@ -63,6 +116,10 @@ export default function SchedulePickupScreen() {
       const service = services.find((s) => s._id === serviceId)
       return total + (service?.pricePerKg || 0)
     }, 0)
+  }
+
+  const formatTimeSlot = (timeSlot: TimeSlot) => {
+    return `${timeSlot.startTime} - ${timeSlot.endTime}`
   }
 
   const handleSchedule = async () => {
@@ -82,17 +139,25 @@ export default function SchedulePickupScreen() {
 
     setLoading(true)
     try {
+      const selectedTimeSlot = availableTimeSlots.find(slot => formatTimeSlot(slot) === selectedTime)
+      
       const orderData = {
-        services: selectedServices.map(serviceId => ({
-          serviceId,
-          quantity: 1
-        })),
+        services: selectedServices.map(serviceId => {
+          const service = services.find(s => s._id === serviceId)
+          return {
+            serviceId,
+            name: service?.name || 'Service',
+            price: service?.pricePerKg || 0,
+            quantity: 1
+          }
+        }),
         pickupDate: selectedDate,
+        pickupTime: selectedTimeSlot?.startTime || '08:00',
         pickupTimeSlot: selectedTime,
         location: {
           address: user?.address || "Namiwawa, Blantyre",
-          latitude: -15.7861,
-          longitude: 35.0058,
+          latitude: user?.latitude || -15.7861,
+          longitude: user?.longitude || 35.0058,
         },
         specialInstructions: notes,
         items: [
@@ -101,7 +166,9 @@ export default function SchedulePickupScreen() {
             quantity: 1,
             weight: 1.0
           }
-        ]
+        ],
+        totalPrice: calculateTotal(),
+        status: "pending"
       }
 
       const newOrder = await apiService.createOrder(orderData)
@@ -110,7 +177,7 @@ export default function SchedulePickupScreen() {
         { 
           text: "Track Order", 
           onPress: () => router.push({
-            pathname: "/(tabs)/tracking",
+            pathname: "/tracking",
             params: { order: JSON.stringify(newOrder) }
           }) 
         },
@@ -119,7 +186,15 @@ export default function SchedulePickupScreen() {
           style: "cancel" 
         }
       ])
+      
+      // Reset form
+      setSelectedServices([])
+      setSelectedDate("")
+      setSelectedTime("")
+      setNotes("")
+      
     } catch (error: any) {
+      console.error('Schedule error:', error)
       Alert.alert("Error", error.message || "Failed to schedule pickup")
     } finally {
       setLoading(false)
@@ -133,7 +208,9 @@ export default function SchedulePickupScreen() {
       'Iron': 'flame',
       'Fold': 'layers',
       'Wash & Fold': 'shirt',
-      'Dry Cleaning': 'sparkles'
+      'Dry Cleaning': 'sparkles',
+      'Laundry': 'shirt',
+      'Cleaning': 'sparkles'
     }
     return iconMap[serviceName] || 'shirt'
   }
@@ -174,30 +251,38 @@ export default function SchedulePickupScreen() {
             <Text style={styles.sectionTitle}>Select Services</Text>
             <Text style={styles.sectionSubtitle}>Choose the services you need</Text>
 
-            {services.map((service) => {
-              const isSelected = selectedServices.includes(service._id)
-              return (
-                <TouchableOpacity
-                  key={service._id}
-                  style={[styles.serviceItem, isSelected && styles.serviceItemSelected]}
-                  onPress={() => toggleService(service._id)}
-                >
-                  <View style={styles.serviceCheckbox}>
-                    {isSelected && <Ionicons name="checkmark" size={16} color={colors.primary} />}
-                  </View>
-                  <View style={styles.serviceIcon}>
-                    <Ionicons name={getServiceIcon(service.name) as any} size={20} color={colors.textSecondary} />
-                  </View>
-                  <View style={styles.serviceInfo}>
-                    <Text style={styles.serviceName}>{service.name}</Text>
-                    <Text style={styles.serviceDescription}>{service.description}</Text>
-                  </View>
-                  <View style={styles.servicePriceContainer}>
-                    <Text style={styles.servicePrice}>MWK {service.pricePerKg}/kg</Text>
-                  </View>
-                </TouchableOpacity>
-              )
-            })}
+            {services.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="shirt-outline" size={48} color={colors.textSecondary} />
+                <Text style={styles.emptyStateText}>No services available</Text>
+                <Text style={styles.emptyStateSubtext}>Please try again later</Text>
+              </View>
+            ) : (
+              services.map((service) => {
+                const isSelected = selectedServices.includes(service._id)
+                return (
+                  <TouchableOpacity
+                    key={service._id}
+                    style={[styles.serviceItem, isSelected && styles.serviceItemSelected]}
+                    onPress={() => toggleService(service._id)}
+                  >
+                    <View style={styles.serviceCheckbox}>
+                      {isSelected && <Ionicons name="checkmark" size={16} color={colors.primary} />}
+                    </View>
+                    <View style={styles.serviceIcon}>
+                      <Ionicons name={getServiceIcon(service.name) as any} size={20} color={colors.textSecondary} />
+                    </View>
+                    <View style={styles.serviceInfo}>
+                      <Text style={styles.serviceName}>{service.name}</Text>
+                      <Text style={styles.serviceDescription}>{service.description}</Text>
+                    </View>
+                    <View style={styles.servicePriceContainer}>
+                      <Text style={styles.servicePrice}>MWK {service.pricePerKg.toLocaleString()}/kg</Text>
+                    </View>
+                  </TouchableOpacity>
+                )
+              })
+            )}
           </View>
 
           {/* Date Selection */}
@@ -205,39 +290,45 @@ export default function SchedulePickupScreen() {
             <Text style={styles.sectionTitle}>
               <Ionicons name="calendar" size={20} color={colors.text} /> Select Date
             </Text>
-            <View style={styles.dateGrid}>
-              {dates.map((dateOption) => (
-                <TouchableOpacity
-                  key={dateOption.date}
-                  style={[
-                    styles.dateButton,
-                    selectedDate === dateOption.date && styles.dateButtonSelected,
-                    !dateOption.available && styles.dateButtonDisabled,
-                  ]}
-                  onPress={() => dateOption.available && setSelectedDate(dateOption.date)}
-                  disabled={!dateOption.available}
-                >
-                  <Text
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.dateScrollContent}
+            >
+              <View style={styles.dateGrid}>
+                {availableDates.map((dateOption) => (
+                  <TouchableOpacity
+                    key={dateOption.date}
                     style={[
-                      styles.dateButtonText,
-                      selectedDate === dateOption.date && styles.dateButtonTextSelected,
-                      !dateOption.available && styles.dateButtonTextDisabled,
+                      styles.dateButton,
+                      selectedDate === dateOption.date && styles.dateButtonSelected,
+                      !dateOption.available && styles.dateButtonDisabled,
                     ]}
+                    onPress={() => dateOption.available && setSelectedDate(dateOption.date)}
+                    disabled={!dateOption.available}
                   >
-                    {dateOption.day}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.dateButtonDate,
-                      selectedDate === dateOption.date && styles.dateButtonDateSelected,
-                      !dateOption.available && styles.dateButtonDateDisabled,
-                    ]}
-                  >
-                    {new Date(dateOption.date).getDate()}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                    <Text
+                      style={[
+                        styles.dateButtonText,
+                        selectedDate === dateOption.date && styles.dateButtonTextSelected,
+                        !dateOption.available && styles.dateButtonTextDisabled,
+                      ]}
+                    >
+                      {dateOption.day}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.dateButtonDate,
+                        selectedDate === dateOption.date && styles.dateButtonDateSelected,
+                        !dateOption.available && styles.dateButtonDateDisabled,
+                      ]}
+                    >
+                      {new Date(dateOption.date).getDate()}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
           </View>
 
           {/* Time Selection */}
@@ -246,19 +337,34 @@ export default function SchedulePickupScreen() {
               <Text style={styles.sectionTitle}>
                 <Ionicons name="time" size={20} color={colors.text} /> Select Time
               </Text>
-              <View style={styles.timeGrid}>
-                {timeSlots.map((time) => (
-                  <TouchableOpacity
-                    key={time}
-                    style={[styles.timeButton, selectedTime === time && styles.timeButtonSelected]}
-                    onPress={() => setSelectedTime(time)}
-                  >
-                    <Text style={[styles.timeButtonText, selectedTime === time && styles.timeButtonTextSelected]}>
-                      {time}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              {availableTimeSlots.length === 0 ? (
+                <View style={styles.emptyTimeSlots}>
+                  <Text style={styles.emptyTimeSlotsText}>No time slots available for this date</Text>
+                </View>
+              ) : (
+                <View style={styles.timeGrid}>
+                  {availableTimeSlots.map((timeSlot) => (
+                    <TouchableOpacity
+                      key={timeSlot.id}
+                      style={[
+                        styles.timeButton, 
+                        selectedTime === formatTimeSlot(timeSlot) && styles.timeButtonSelected,
+                        !timeSlot.available && styles.timeButtonDisabled
+                      ]}
+                      onPress={() => timeSlot.available && setSelectedTime(formatTimeSlot(timeSlot))}
+                      disabled={!timeSlot.available}
+                    >
+                      <Text style={[
+                        styles.timeButtonText, 
+                        selectedTime === formatTimeSlot(timeSlot) && styles.timeButtonTextSelected,
+                        !timeSlot.available && styles.timeButtonTextDisabled
+                      ]}>
+                        {formatTimeSlot(timeSlot)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </View>
           )}
 
@@ -271,8 +377,16 @@ export default function SchedulePickupScreen() {
               <Ionicons name="home" size={20} color={colors.textSecondary} />
               <View style={styles.locationInfo}>
                 <Text style={styles.locationTitle}>Home Address</Text>
-                <Text style={styles.locationAddress}>{user?.address || "Namiwawa, Blantyre"}</Text>
+                <Text style={styles.locationAddress}>
+                  {user?.address || "Please update your address in profile"}
+                </Text>
               </View>
+              <TouchableOpacity 
+                style={styles.changeLocationButton}
+                onPress={() => Alert.alert("Info", "Update your address in the profile section")}
+              >
+                <Text style={styles.changeLocationText}>Change</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -282,12 +396,13 @@ export default function SchedulePickupScreen() {
             <Text style={styles.sectionSubtitle}>Any special requests or notes</Text>
             <TextInput
               style={styles.notesInput}
-              placeholder="e.g., Please handle delicate items with care..."
+              placeholder="e.g., Please handle delicate items with care, specific detergent preferences, etc."
               value={notes}
               onChangeText={setNotes}
               multiline
               numberOfLines={4}
               textAlignVertical="top"
+              placeholderTextColor={colors.textSecondary}
             />
           </View>
         </ScrollView>
@@ -299,6 +414,7 @@ export default function SchedulePickupScreen() {
               <Text style={styles.summaryLabel}>Total Estimate</Text>
               <Text style={styles.summaryPrice}>MWK {calculateTotal().toLocaleString()}/kg</Text>
             </View>
+            <Text style={styles.summaryNote}>* Final price may vary based on actual weight</Text>
             <TouchableOpacity
               style={[styles.scheduleButton, (!selectedDate || !selectedTime || loading) && styles.scheduleButtonDisabled]}
               onPress={handleSchedule}
@@ -349,6 +465,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
     marginBottom: 16,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+    backgroundColor: 'white',
+    borderRadius: 12,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
   serviceItem: {
     flexDirection: "row",
@@ -407,18 +542,20 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: colors.text,
   },
+  dateScrollContent: {
+    paddingHorizontal: 2,
+  },
   dateGrid: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    gap: 8,
   },
   dateButton: {
-    flex: 1,
+    width: 80,
     height: 70,
     backgroundColor: "white",
     borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
-    marginHorizontal: 2,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -452,6 +589,17 @@ const styles = StyleSheet.create({
   dateButtonDateDisabled: {
     color: colors.textSecondary,
   },
+  emptyTimeSlots: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+  },
+  emptyTimeSlotsText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
   timeGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -471,12 +619,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
+  timeButtonDisabled: {
+    backgroundColor: colors.background,
+    opacity: 0.5,
+  },
   timeButtonText: {
     fontSize: 14,
     color: colors.text,
   },
   timeButtonTextSelected: {
     color: "white",
+  },
+  timeButtonTextDisabled: {
+    color: colors.textSecondary,
   },
   locationCard: {
     flexDirection: "row",
@@ -486,6 +641,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   locationInfo: {
+    flex: 1,
     marginLeft: 12,
   },
   locationTitle: {
@@ -497,6 +653,17 @@ const styles = StyleSheet.create({
   locationAddress: {
     fontSize: 14,
     color: colors.textSecondary,
+  },
+  changeLocationButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: colors.background,
+    borderRadius: 6,
+  },
+  changeLocationText: {
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: '600',
   },
   notesInput: {
     backgroundColor: "white",
@@ -518,7 +685,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 8,
   },
   summaryLabel: {
     fontSize: 16,
@@ -529,6 +696,12 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "bold",
     color: colors.primary,
+  },
+  summaryNote: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginBottom: 16,
+    textAlign: 'center',
   },
   scheduleButton: {
     backgroundColor: colors.primary,
