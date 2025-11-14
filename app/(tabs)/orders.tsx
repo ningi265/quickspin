@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons"
 import { Stack, useFocusEffect, useRouter } from "expo-router"
 import { useCallback, useState } from "react"
-import { ActivityIndicator, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { ActivityIndicator, Alert, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native"
 import { colors } from "../../constants/theme"
 import { useAuth } from "../../contexts/AuthContext"
 import { apiService } from "../../hooks/services/api"
@@ -31,6 +31,8 @@ interface Order {
   }>;
   progress: number;
   createdAt: string;
+  qrCode?: string;
+  qrCodeImage?: string;
 }
 
 export default function OrdersScreen() {
@@ -57,20 +59,97 @@ export default function OrdersScreen() {
   }
 
   const handleOrderPress = (order: Order) => {
+    // Show options menu for order actions
+    Alert.alert(
+      "Order Options",
+      `What would you like to do with order #${order.orderId}?`,
+      [
+        {
+          text: "Show QR Code",
+          onPress: () => showQRCode(order)
+        },
+        {
+          text: "Track Order",
+          onPress: () => trackOrder(order)
+        },
+        {
+          text: "View Details",
+          onPress: () => viewOrderDetails(order),
+          style: "default"
+        },
+        {
+          text: "Cancel",
+          style: "cancel"
+        }
+      ]
+    )
+  }
+
+  const showQRCode = (order: Order) => {
+    if (!order.qrCode && !order.qrCodeImage) {
+      Alert.alert(
+        "QR Code Not Available",
+        "This order doesn't have a QR code yet. Please contact support if you need assistance.",
+        [{ text: "OK" }]
+      )
+      return
+    }
+
+    router.push({
+      pathname: "/order-qr",
+      params: { 
+        order: JSON.stringify(order),
+        qrCode: order.qrCodeImage 
+      }
+    })
+  }
+
+  const trackOrder = (order: Order) => {
     router.push({
       pathname: "/tracking",
       params: { order: JSON.stringify(order) }
     })
   }
 
+  const viewOrderDetails = (order: Order) => {
+    // Navigate to order details screen or show detailed alert
+    Alert.alert(
+      `Order #${order.orderId} Details`,
+      `Status: ${getStatusText(order.status)}\n` +
+      `Total: MWK ${order.totalPrice.toLocaleString()}\n` +
+      `Pickup: ${formatDate(order.pickupDate)}\n` +
+      `Delivery: ${formatDate(order.deliveryDate)}\n` +
+      `Services: ${order.services.map(s => s.name).join(", ")}\n` +
+      `Items: ${order.items.map(i => `${i.name} (${i.quantity}x)`).join(", ")}`,
+      [{ text: "OK" }]
+    )
+  }
+
+  const handleQuickQR = (order: Order) => {
+    if (!order.qrCode && !order.qrCodeImage) {
+      Alert.alert(
+        "QR Code Not Available",
+        "QR code will be available once the order is processed.",
+        [{ text: "OK" }]
+      )
+      return
+    }
+
+    showQRCode(order)
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "pending":
         return colors.warning
+      case "pickup_scheduled":
+        return colors.info
       case "picked_up":
         return colors.primary
       case "in_progress":
         return colors.warning
+      case "ready_for_delivery":
+        return colors.success
       case "delivered":
         return colors.success
       case "cancelled":
@@ -81,11 +160,23 @@ export default function OrdersScreen() {
   }
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString()
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    })
   }
 
   const getStatusText = (status: string) => {
-    return status.replace("_", " ").toUpperCase()
+    return status.split('_').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ')
+  }
+
+  const canShowQRCode = (order: Order) => {
+    // QR code is available for orders that are not delivered or cancelled
+    return !['delivered', 'cancelled'].includes(order.status) && 
+           (order.qrCode || order.qrCodeImage)
   }
 
   if (loading) {
@@ -145,16 +236,20 @@ export default function OrdersScreen() {
       />
       <SafeAreaView style={styles.container}>
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          <Text style={styles.sectionTitle}>Order History</Text>
+          <View style={styles.headerSection}>
+            <Text style={styles.sectionTitle}>Order History</Text>
+            <Text style={styles.ordersCount}>{orders.length} order{orders.length !== 1 ? 's' : ''}</Text>
+          </View>
           
           {orders.map((order) => (
             <TouchableOpacity 
               key={order._id} 
               style={styles.orderCard}
               onPress={() => handleOrderPress(order)}
+              onLongPress={() => handleQuickQR(order)}
             >
               <View style={styles.orderHeader}>
-                <View>
+                <View style={styles.orderInfo}>
                   <Text style={styles.orderId}>Order #{order.orderId}</Text>
                   <Text style={styles.orderDate}>
                     Placed on {formatDate(order.createdAt)}
@@ -192,10 +287,42 @@ export default function OrdersScreen() {
                 </View>
               </View>
 
-              <View style={styles.viewOrderButton}>
-                <Text style={styles.viewOrderButtonText}>View Order Details</Text>
-                <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+              <View style={styles.actionButtons}>
+                {canShowQRCode(order) && (
+                  <TouchableOpacity 
+                    style={styles.qrButton}
+                    onPress={() => handleQuickQR(order)}
+                  >
+                    <Ionicons name="qr-code-outline" size={16} color={colors.primary} />
+                    <Text style={styles.qrButtonText}>Show QR</Text>
+                  </TouchableOpacity>
+                )}
+                
+                <TouchableOpacity 
+                  style={styles.trackButton}
+                  onPress={() => trackOrder(order)}
+                >
+                  <Ionicons name="navigate-outline" size={16} color={colors.text} />
+                  <Text style={styles.trackButtonText}>Track</Text>
+                </TouchableOpacity>
+
+                <View style={styles.spacer} />
+
+                <TouchableOpacity 
+                  style={styles.moreButton}
+                  onPress={() => handleOrderPress(order)}
+                >
+                  <Ionicons name="ellipsis-horizontal" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
               </View>
+
+              {/* QR Code Available Indicator */}
+              {canShowQRCode(order) && (
+                <View style={styles.qrIndicator}>
+                  <Ionicons name="qr-code" size={12} color={colors.primary} />
+                  <Text style={styles.qrIndicatorText}>QR Code Available</Text>
+                </View>
+              )}
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -253,11 +380,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  headerSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: colors.text,
-    marginBottom: 16,
+  },
+  ordersCount: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontWeight: '500',
   },
   orderCard: {
     backgroundColor: "white",
@@ -278,6 +415,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start",
     marginBottom: 16,
+  },
+  orderInfo: {
+    flex: 1,
   },
   orderId: {
     fontSize: 18,
@@ -328,17 +468,65 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     flex: 1,
   },
-  viewOrderButton: {
+  actionButtons: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+    gap: 8,
   },
-  viewOrderButtonText: {
+  qrButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary + '15',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+  },
+  qrButtonText: {
     color: colors.primary,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "600",
+  },
+  trackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+  },
+  trackButtonText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  moreButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  spacer: {
+    flex: 1,
+  },
+  qrIndicator: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary + '20',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    gap: 4,
+  },
+  qrIndicatorText: {
+    fontSize: 10,
+    color: colors.primary,
+    fontWeight: '500',
   },
 })

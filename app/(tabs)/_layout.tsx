@@ -18,7 +18,7 @@ export default function TabsLayout() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+  
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: colors.primary,
@@ -79,6 +79,6 @@ export default function TabsLayout() {
           }}
         />
       </Tabs>
-    </SafeAreaView>
+  
   )
 }

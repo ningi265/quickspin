@@ -42,6 +42,9 @@ const createOrder = async (req, res) => {
     const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
     const orderId = `ORD-${timestamp}${random}`;
 
+    // Generate unique QR code data
+    const qrCodeData = `LAUNDRY_ORDER_${orderId}_${Date.now()}`;
+
     const order = new Order({
       orderId: orderId,
       userId: req.userId,
@@ -54,10 +57,14 @@ const createOrder = async (req, res) => {
       location,
       specialInstructions,
       items,
-      progress: 25 // Starting progress
+      progress: 25, // Starting progress
+      qrCode: qrCodeData // Store QR code data
     });
 
     await order.save();
+
+    // Generate QR code image
+    const qrCodeImage = await QRCode.toDataURL(qrCodeData);
 
     // Create tracking timeline
     const tracking = new Tracking({
@@ -75,7 +82,11 @@ const createOrder = async (req, res) => {
 
     await tracking.save();
 
-    res.status(201).json(order);
+    // Return order with QR code
+    res.status(201).json({
+      ...order.toObject(),
+      qrCodeImage
+    });
   } catch (error) {
     console.error('Order creation error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -134,4 +145,63 @@ const updateOrderStatus = async (req, res) => {
   }
 };
 
-module.exports = { createOrder, getOrders, getOrderById, updateOrderStatus };
+
+const verifyQRCode = async (req, res) => {
+  try {
+    const { qrCodeData } = req.body;
+    const driverId = req.userId; // Assuming driver is authenticated
+
+    // Find order by QR code
+    const order = await Order.findOne({ qrCode: qrCodeData })
+      .populate('userId', 'name phone address');
+
+    if (!order) {
+      return res.status(404).json({ message: 'Invalid QR code or order not found' });
+    }
+
+    // Check if already verified
+    if (order.pickupVerification.verified) {
+      return res.status(400).json({ message: 'QR code already used' });
+    }
+
+    // Update order status and verification
+    order.status = 'picked_up';
+    order.progress = 50;
+    order.pickupVerification = {
+      verified: true,
+      verifiedAt: new Date(),
+      verifiedBy: driverId
+    };
+
+    await order.save();
+
+    // Update tracking
+    const tracking = await Tracking.findOne({ orderId: order._id });
+    if (tracking) {
+      const collectedStep = tracking.timeline.find(step => step.step === 'Items Collected');
+      if (collectedStep) {
+        collectedStep.completed = true;
+        collectedStep.time = new Date();
+        collectedStep.description = `Items collected by driver at ${new Date().toLocaleString()}`;
+      }
+      tracking.currentStep = 'items_collected';
+      await tracking.save();
+    }
+
+    res.json({
+      success: true,
+      message: 'Pickup verified successfully',
+      order: {
+        orderId: order.orderId,
+        customerName: order.userId.name,
+        customerAddress: order.userId.address,
+        customerPhone: order.userId.phone,
+        services: order.services
+      }
+    });
+  } catch (error) {
+    console.error('QR verification error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+module.exports = { createOrder, getOrders, getOrderById, updateOrderStatus, verifyQRCode };

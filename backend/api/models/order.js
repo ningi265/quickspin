@@ -57,6 +57,15 @@ const orderSchema = new mongoose.Schema({
   progress: {
     type: Number,
     default: 0
+  },
+   qrCode: {
+    type: String,
+    unique: true
+  },
+  pickupVerification: {
+    verified: { type: Boolean, default: false },
+    verifiedAt: Date,
+    verifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
   }
 }, {
   timestamps: true

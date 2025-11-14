@@ -173,33 +173,43 @@ export default function SchedulePickupScreen() {
 
       const newOrder = await apiService.createOrder(orderData)
       
-      Alert.alert("Success", "Your pickup has been scheduled successfully!", [
-        { 
-          text: "Track Order", 
-          onPress: () => router.push({
-            pathname: "/tracking",
-            params: { order: JSON.stringify(newOrder) }
-          }) 
-        },
-        { 
-          text: "OK", 
-          style: "cancel" 
-        }
-      ])
-      
-      // Reset form
-      setSelectedServices([])
-      setSelectedDate("")
-      setSelectedTime("")
-      setNotes("")
-      
-    } catch (error: any) {
-      console.error('Schedule error:', error)
-      Alert.alert("Error", error.message || "Failed to schedule pickup")
-    } finally {
-      setLoading(false)
-    }
+         Alert.alert("Success", "Your pickup has been scheduled successfully!", [
+      { 
+        text: "View QR Code", 
+        onPress: () => router.push({
+          pathname: "/order-qr",
+          params: { 
+            order: JSON.stringify(newOrder),
+            qrCode: newOrder.qrCodeImage 
+          }
+        }) 
+      },
+      { 
+        text: "Track Order", 
+        onPress: () => router.push({
+          pathname: "/tracking",
+          params: { order: JSON.stringify(newOrder) }
+        }) 
+      },
+      { 
+        text: "OK", 
+        style: "cancel" 
+      }
+    ]);
+    
+    // Reset form
+    setSelectedServices([]);
+    setSelectedDate("");
+    setSelectedTime("");
+    setNotes("");
+    
+  } catch (error: any) {
+    console.error('Schedule error:', error);
+    Alert.alert("Error", error.message || "Failed to schedule pickup");
+  } finally {
+    setLoading(false);
   }
+}
 
   const getServiceIcon = (serviceName: string) => {
     const iconMap: { [key: string]: string } = {
