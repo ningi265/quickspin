@@ -62,6 +62,9 @@ const orderSchema = new mongoose.Schema({
     type: String,
     unique: true
   },
+    qrCodeImage: {
+    type: String // Store the base64 QR code image
+  },
   pickupVerification: {
     verified: { type: Boolean, default: false },
     verifiedAt: Date,

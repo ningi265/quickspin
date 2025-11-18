@@ -86,7 +86,16 @@ export default function OrdersScreen() {
   }
 
   const showQRCode = (order: Order) => {
-    if (!order.qrCode && !order.qrCodeImage) {
+    if (!canShowQRCode(order)) {
+      Alert.alert(
+        "QR Code Not Available",
+        "QR code is only available for orders that are pending or scheduled for pickup. Once your order has been picked up, the QR code is no longer accessible.",
+        [{ text: "OK" }]
+      )
+      return
+    }
+
+    if (!order.qrCode && !order.qrCodeImage && !order.qrCodeData) {
       Alert.alert(
         "QR Code Not Available",
         "This order doesn't have a QR code yet. Please contact support if you need assistance.",
@@ -99,7 +108,8 @@ export default function OrdersScreen() {
       pathname: "/order-qr",
       params: { 
         order: JSON.stringify(order),
-        qrCode: order.qrCodeImage 
+        qrCode: order.qrCodeImage,
+        qrCodeData: order.qrCode || order.qrCodeData
       }
     })
   }
@@ -126,6 +136,15 @@ export default function OrdersScreen() {
   }
 
   const handleQuickQR = (order: Order) => {
+    if (!canShowQRCode(order)) {
+      Alert.alert(
+        "QR Code Not Available",
+        "QR code is only available for orders that are pending or scheduled for pickup. Once your order has been picked up, the QR code is no longer accessible.",
+        [{ text: "OK" }]
+      )
+      return
+    }
+
     if (!order.qrCode && !order.qrCodeImage) {
       Alert.alert(
         "QR Code Not Available",
@@ -174,9 +193,11 @@ export default function OrdersScreen() {
   }
 
   const canShowQRCode = (order: Order) => {
-    // QR code is available for orders that are not delivered or cancelled
-    return !['delivered', 'cancelled'].includes(order.status) && 
-           (order.qrCode || order.qrCodeImage)
+    // QR code is only available for orders that are pending or scheduled for pickup
+    // Once picked up, QR code should not be accessible
+    const allowedStatuses = ['pending', 'pickup_scheduled']
+    return allowedStatuses.includes(order.status) && 
+           (order.qrCode || order.qrCodeImage || order.qrCodeData)
   }
 
   if (loading) {
@@ -308,21 +329,7 @@ export default function OrdersScreen() {
 
                 <View style={styles.spacer} />
 
-                <TouchableOpacity 
-                  style={styles.moreButton}
-                  onPress={() => handleOrderPress(order)}
-                >
-                  <Ionicons name="ellipsis-horizontal" size={16} color={colors.textSecondary} />
-                </TouchableOpacity>
               </View>
-
-              {/* QR Code Available Indicator */}
-              {canShowQRCode(order) && (
-                <View style={styles.qrIndicator}>
-                  <Ionicons name="qr-code" size={12} color={colors.primary} />
-                  <Text style={styles.qrIndicatorText}>QR Code Available</Text>
-                </View>
-              )}
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -511,22 +518,5 @@ const styles = StyleSheet.create({
   },
   spacer: {
     flex: 1,
-  },
-  qrIndicator: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.primary + '20',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    gap: 4,
-  },
-  qrIndicatorText: {
-    fontSize: 10,
-    color: colors.primary,
-    fontWeight: '500',
   },
 })

@@ -27,6 +27,15 @@ const userSchema = new mongoose.Schema({
   memberSince: {
     type: Date,
     default: Date.now
+  },
+  role: {
+    type: String,
+    enum: ['customer', 'driver', 'admin'],
+    default: 'customer'
+  },
+  isActive: {
+    type: Boolean,
+    default: true
   }
 }, {
   timestamps: true

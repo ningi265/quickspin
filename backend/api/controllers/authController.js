@@ -65,7 +65,8 @@ const register = async (req, res) => {
       email,
       phoneNumber,
       address,
-      password: hashedPassword
+      password: hashedPassword,
+      role: 'customer'
     });
 
     console.log('💾 Saving user to database...');
@@ -192,4 +193,156 @@ const getProfile = async (req, res) => {
   }
 };
 
-module.exports = { register, login, getProfile };
+
+const getUsers = async (req, res) => {
+  try {
+    console.log('👥 Admin fetching users list');
+    
+    // Check if user is admin (you might want to add admin role to your user model)
+     const requestingUser = await User.findById(req.userId);
+     console.log(requestingUser.role);
+     if (!requestingUser || requestingUser.role !== 'admin') {
+       return res.status(403).json({ message: 'Access denied. Admin only.' });
+     }
+
+    const { 
+      page = 1, 
+      limit = 10, 
+      search = '',
+      sortBy = 'createdAt',
+      sortOrder = 'desc' 
+    } = req.query;
+
+    console.log('📋 Query parameters:', { page, limit, search, sortBy, sortOrder });
+
+    // Build search filter
+    const filter = {};
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { phoneNumber: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Calculate pagination
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build sort object
+    const sort = {};
+    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+    console.log('🔍 Executing database query...');
+    
+    // Get users with pagination
+    const users = await User.find(filter)
+      .select('-password') // Exclude password field
+      .sort(sort)
+      .skip(skip)
+      .limit(limitNum);
+
+    // Get total count for pagination
+    const totalUsers = await User.countDocuments(filter);
+    const totalPages = Math.ceil(totalUsers / limitNum);
+
+    console.log(`✅ Found ${users.length} users out of ${totalUsers} total`);
+
+    // Format response
+    const formattedUsers = users.map(user => ({
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      address: user.address,
+      role: user.role || 'customer', // Default to customer if role doesn't exist
+      memberSince: user.memberSince,
+      isActive: user.isActive !== undefined ? user.isActive : true, // Default to active
+      lastLogin: user.lastLogin,
+      orderCount: user.orderCount || 0, // You might want to calculate this from orders
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt
+    }));
+
+    res.json({
+      success: true,
+      users: formattedUsers,
+      pagination: {
+        currentPage: pageNum,
+        totalPages,
+        totalUsers,
+        hasNext: pageNum < totalPages,
+        hasPrev: pageNum > 1,
+        limit: limitNum
+      },
+      filters: {
+        search,
+        sortBy,
+        sortOrder
+      }
+    });
+
+  } catch (error) {
+    console.error('💥 Get users error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error while fetching users', 
+      error: error.message 
+    });
+  }
+};
+
+const updateUserStatus = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { status } = req.body;
+
+    console.log('🔄 Updating user status:', { userId, status });
+
+    // Validate status
+    if (!status || !['active', 'inactive'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Status must be either "active" or "inactive"'
+      });
+    }
+
+    // Check if user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Update user status
+    user.isActive = status === 'active';
+    await user.save();
+
+    console.log('✅ User status updated successfully');
+
+    res.json({
+      success: true,
+      message: `User status updated to ${status}`,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        status: user.isActive ? 'active' : 'inactive',
+        isActive: user.isActive
+      }
+    });
+
+  } catch (error) {
+    console.error('💥 Update user status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while updating user status',
+      error: error.message
+    });
+  }
+};
+
+module.exports = { register, login, getProfile, getUsers, updateUserStatus };

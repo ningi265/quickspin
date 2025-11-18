@@ -30,12 +30,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 const getApiBaseUrl = () => {
   if (__DEV__) {
     if (Platform.OS === 'android') {
-      return 'https://quickspin.nexusmwi.com/api'
+      return   'https://quickspin.nexusmwi.com/api' //'http://10.84.11.20:4000/api'
     } else {
-      return 'https://quickspin.nexusmwi.com/api'
+      return  'https://quickspin.nexusmwi.com/api' //'http://10.84.11.20:4000/api'
     }
   }
-  return 'https://quickspin.nexusmwi.com/api'
+  return  'https://quickspin.nexusmwi.com/api'  //'http://10.84.11.20:4000/api'
 }
 
 const API_BASE_URL = getApiBaseUrl()

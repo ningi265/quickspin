@@ -1,9 +1,8 @@
 // app/order-qr.tsx
 import { Ionicons } from "@expo/vector-icons";
-import { Stack, useLocalSearchParams, router } from "expo-router";
-import { useState } from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View, Share, Alert } from "react-native";
-import { colors } from "../../constants/theme";
+import { router, Stack, useLocalSearchParams } from "expo-router";
+import { Alert, Image, Share, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { colors } from "../constants/theme";
 
 export default function OrderQRScreen() {
   const params = useLocalSearchParams();

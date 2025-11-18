@@ -23,6 +23,9 @@ app.use('/api/auth', require('./api/routes/authRoutes'));
 app.use('/api/orders', require('./api/routes/ordersRoutes'));
 app.use('/api/services', require('./api/routes/servicesRoutes'));
 app.use('/api/tracking', require('./api/routes/trackingRoutes'));
+app.use('/api/drivers', require('./api/routes/drivers'));
+app.use('/api/system-settings', require('./api/routes/systemSettings'));
+app.use('/api/statistics', require('./api/routes/statisticsRoutes'));
 
 // Default route
 app.get('/', (req, res) => {
